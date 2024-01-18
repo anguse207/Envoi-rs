@@ -16,6 +16,11 @@ use tls_listener::TlsListener;
 
 use once_cell::sync::Lazy;
 
+/*
+TODO: use different cert key combo per host
+Can client just use different certs, and return response?
+*/ 
+
 static HOSTS: Lazy<HashMap<&str, &str>> = Lazy::new(get_hosts);
 
 fn get_hosts() -> HashMap<&'static str, &'static str> {
