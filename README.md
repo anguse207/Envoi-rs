@@ -15,3 +15,14 @@ Automatical.
 ### Speed
 
 Should be faster than NGINX, simply by being built directly on top of hyper, and limiting the scope.
+
+## tls
+
+convert using openssl cli to .der (b64 format).
+
+
+PKCS8 => PKCS1 -----BEGIN PRIVATE KEY-----
+`openssl pkey  -in input.pem -out output.key -traditional`
+
+EC => DER -----BEGIN EC PRIVATE KEY----- =>
+`openssl ec -in input.key -out output.der -outform DER`

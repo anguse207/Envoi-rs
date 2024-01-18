@@ -11,7 +11,7 @@ use std::{
     collections::HashMap,
     future::ready,
 };
-use tls_cfg::tls_acceptor;
+use tls_cfg::tls_acceptor_impl;
 use tls_listener::TlsListener;
 
 use once_cell::sync::Lazy;
@@ -22,6 +22,9 @@ Can client just use different certs, and return response?
 */ 
 
 static HOSTS: Lazy<HashMap<&str, &str>> = Lazy::new(get_hosts);
+
+const CERT: &[u8] = include_bytes!("../tls/emby/public.der");
+const PKEY: &[u8] = include_bytes!("../tls/emby/private.der");
 
 fn get_hosts() -> HashMap<&'static str, &'static str> {
     let mut hosts: HashMap<&str, &str> = HashMap::new();
@@ -41,10 +44,8 @@ fn get_hosts() -> HashMap<&'static str, &'static str> {
 async fn handle(mut req: Request<Body>) -> Result<Response<Body>, hyper::Error> {
     let host_header = req.headers().get("host").unwrap().to_str().unwrap();
 
-    let host = match HOSTS.get(host_header) {
-        Some(known_host) => known_host,
-        None => host_header,
-    };
+    let host = HOSTS.get(host_header)
+                                .unwrap_or_else(|| &host_header);
 
     //let host = "http://192.168.68.100:81";
     let uri = format!("{host}{}", req.uri());
@@ -61,7 +62,8 @@ async fn main() {
 
     let new_svc = make_service_fn(|_| async { Ok::<_, Infallible>(service_fn(handle)) });
 
-    let incoming = TlsListener::new(tls_acceptor(), AddrIncoming::bind(&addr).unwrap())
+let incoming = TlsListener::new(tls_acceptor_impl(PKEY, CERT)
+    , AddrIncoming::bind(&addr).unwrap())
         .connections()
         .filter(|conn| {
             if let Err(err) = conn {
