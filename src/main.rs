@@ -11,7 +11,7 @@ use std::{
     collections::HashMap,
     future::ready,
 };
-use tls_cfg::tls_cfg::tls_acceptor;
+use tls_cfg::tls_acceptor;
 use tls_listener::TlsListener;
 
 use once_cell::sync::Lazy;
