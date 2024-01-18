@@ -25,15 +25,15 @@ static HOSTS: Lazy<HashMap<&str, &str>> = Lazy::new(get_hosts);
 
 fn get_hosts() -> HashMap<&'static str, &'static str> {
     let mut hosts: HashMap<&str, &str> = HashMap::new();
-    hosts.insert("npm.citrusfire.co.uk", "http://192.168.68.100:81");
-    hosts.insert("emby.citrusfire.co.uk", "http://192.168.68.100:8096");
-    hosts.insert("plex.citrusfire.co.uk", "http://192.168.68.100:32400");
-    hosts.insert("radarr.citrusfire.co.uk", "http://192.168.68.100:7878");
-    hosts.insert("sonarr.citrusfire.co.uk", "http://192.168.68.100:8989");
-    hosts.insert("prowlarr.citrusfire.co.uk", "http://192.168.68.100:9696");
-    hosts.insert("transmission.citrusfire.co.uk", "http://192.168.68.100:9091");
-    hosts.insert("request.citrusfire.co.uk", "http://192.168.68.100:8920");
-    hosts.insert("git.citrusfire.co.uk", "http://192.168.68.100:2080");
+    hosts.insert("npm.citrusfire.co.uk",            "http://192.168.68.100:81");
+    hosts.insert("emby.citrusfire.co.uk",           "http://192.168.68.100:8096");
+    hosts.insert("plex.citrusfire.co.uk",           "http://192.168.68.100:32400");
+    hosts.insert("radarr.citrusfire.co.uk",         "http://192.168.68.100:7878");
+    hosts.insert("sonarr.citrusfire.co.uk",         "http://192.168.68.100:8989");
+    hosts.insert("prowlarr.citrusfire.co.uk",       "http://192.168.68.100:9696");
+    hosts.insert("transmission.citrusfire.co.uk",   "http://192.168.68.100:9091");
+    hosts.insert("request.citrusfire.co.uk",        "http://192.168.68.100:8920");
+    hosts.insert("git.citrusfire.co.uk",            "http://192.168.68.100:2080");
 
     hosts
 }
@@ -41,11 +41,14 @@ fn get_hosts() -> HashMap<&'static str, &'static str> {
 async fn handle(mut req: Request<Body>) -> Result<Response<Body>, hyper::Error> {
     let host_header = req.headers().get("host").unwrap().to_str().unwrap();
 
-    let host = HOSTS.get(host_header).unwrap();
+    let host = match HOSTS.get(host_header) {
+        Some(known_host) => known_host,
+        None => host_header,
+    };
 
     //let host = "http://192.168.68.100:81";
     let uri = format!("{host}{}", req.uri());
-
+    println!("\n{host_header} => \n{host}");
     *req.uri_mut() = uri.parse().unwrap();
     let client = Client::new();
 
