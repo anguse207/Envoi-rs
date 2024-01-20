@@ -86,7 +86,7 @@ dependencies = [
  "once_cell",
  "serde",
  "serde_json",
- "tls-listener",
+ "tls_listener",
  "tokio",
  "tokio-rustls",
  "tracing",
@@ -728,10 +728,8 @@ dependencies = [
 ]
 
 [[package]]
-name = "tls-listener"
+name = "tls_listener"
 version = "0.9.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e516b94ec383622ae4da09b2a9bab471c4c880453c93fd0dd4dff1f6f2ff0849"
 dependencies = [
  "futures-util",
  "pin-project-lite",
