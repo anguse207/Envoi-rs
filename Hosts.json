@@ -1,0 +1,66 @@
+[
+  {
+    "host": "emby.citrusfire.co.uk",
+    "destination": "http://192.168.68.100:8096",
+    "tls": {
+      "public": "./public.pem",
+      "private": "./private.pem"
+    }
+  },
+  {
+    "host": "plex.citrusfire.co.uk",
+    "destination": "http://192.168.68.100:32400",
+    "tls": {
+      "public": "./public.pem",
+      "private": "./private.pem"
+    }
+  },
+  {
+    "host": "radarr.citrusfire.co.uk",
+    "destination": "http://192.168.68.100:7878",
+    "tls": {
+      "public": "./public.pem",
+      "private": "./private.pem"
+    }
+  },
+  {
+    "host": "sonarr.citrusfire.co.uk",
+    "destination": "http://192.168.68.100:8989",
+    "tls": {
+      "public": "./public.pem",
+      "private": "./private.pem"
+    }
+  },
+  {
+    "host": "prowlarr.citrusfire.co.uk",
+    "destination": "http://192.168.68.100:9696",
+    "tls": {
+      "public": "./public.pem",
+      "private": "./private.pem"
+    }
+  },
+  {
+    "host": "transmission.citrusfire.co.uk",
+    "destination": "http://192.168.68.100:9091",
+    "tls": {
+      "public": "./public.pem",
+      "private": "./private.pem"
+    }
+  },
+  {
+    "host": "request.citrusfire.co.uk",
+    "destination": "http://192.168.68.100:8920",
+    "tls": {
+      "public": "./public.pem",
+      "private": "./private.pem"
+    }
+  },
+  {
+    "host": "git.citrusfire.co.uk",
+    "destination": "http://192.168.68.100:2080",
+    "tls": {
+      "public": "./public.pem",
+      "private": "./private.pem"
+    }
+  }
+]
