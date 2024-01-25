@@ -1,6 +1,7 @@
 mod config_loader;
 mod tls;
 
+use futures_util::future::poll_fn;
 use hyper::service::service_fn;
 use hyper::Request;
 
@@ -10,7 +11,10 @@ use hyper_util::rt::TokioExecutor;
 use hyper_util::server::conn::auto::Builder;
 use pki_types::{CertificateDer, PrivateKeyDer};
 use rustls::ServerConfig;
+use tokio::io::ReadBuf;
 use tokio_rustls::TlsAcceptor;
+use std::any::Any;
+use std::str::from_utf8;
 use std::sync::Arc;
 use std::{fs, io};
 use std::{env, future::ready};
@@ -92,6 +96,21 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
 
     loop {
         let (tcp_stream, _remote_addr) = incoming.accept().await?;
+        // TODO: Can you extract the header from the TCP stream, by peaking into the data?!
+
+        let mut buf = [0; 2];
+        let mut buf = ReadBuf::new(&mut buf);
+    
+        let n = 2;
+        while let Ok(polled_bytes) = poll_fn(|cx| {
+            tcp_stream.poll_peek(cx, &mut buf)
+        }).await {
+            if polled_bytes >= n {
+                let str = from_utf8(buf.filled()).unwrap();
+                println!("{:?}",buf.filled());
+                println!("{:?}",_remote_addr);
+            }
+        }
 
         let tls_acceptor = tls_acceptor.clone();
         tokio::spawn(async move {
