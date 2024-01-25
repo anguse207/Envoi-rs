@@ -14,6 +14,7 @@ use rustls::ServerConfig;
 use tokio::io::ReadBuf;
 use tokio_rustls::TlsAcceptor;
 use std::any::Any;
+use std::io::Read;
 use std::str::from_utf8;
 use std::sync::Arc;
 use std::{fs, io};
@@ -109,6 +110,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
                 let str = from_utf8(buf.filled()).unwrap();
                 println!("{:?}",buf.filled());
                 println!("{:?}",_remote_addr);
+                let bytes: &[u8] = buf.filled();
+                let x: u16 = *bytemuck::from_bytes(bytes);
+                println!("Port: {x}");
             }
         }
 

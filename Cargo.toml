@@ -27,3 +27,4 @@ tower-service = "0.3"
 webpki-roots = { version = "0.26", optional = true }
 http = "1"
 rustls-pemfile = "2"
+bytemuck = "1.14.1"
