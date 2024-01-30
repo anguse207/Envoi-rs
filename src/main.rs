@@ -1,24 +1,15 @@
 mod config_loader;
 mod tls;
 
-use hyper::service::service_fn;
-use hyper::Request;
+use axum::{extract::{Host, OriginalUri, Request}, response::IntoResponse, routing::any, Router};
+use axum_server::tls_rustls::RustlsConfig;
 
-use futures_util::stream::StreamExt;
 use hyper_util::client::legacy::Client;
 use hyper_util::rt::TokioExecutor;
-use std::future::ready;
 use std::net::SocketAddr;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
-use hyper::server::conn::http1;
-use hyper_util::rt::tokio::TokioIo;
-
-use tls::tls_acceptor_impl;
-use tls_listener::TlsListener;
-
 use once_cell::sync::Lazy;
-use tokio::net::TcpListener;
 
 use config_loader::Config;
 
@@ -30,34 +21,35 @@ Can client just use different certs, and return response? NO
 // Load config from file / create new file
 static HOSTS: Lazy<Config> = Lazy::new(Config::load);
 
-const CERT: &[u8] = include_bytes!("../tls/cloudflare-origin/public.der");
-const PKEY: &[u8] = include_bytes!("../tls/cloudflare-origin/private.der");
+const PUBLIC: &[u8] = include_bytes!("../tls/cloudflare-origin/public.pem");
+const PRIVATE: &[u8] = include_bytes!("../tls/cloudflare-origin/private.pem");
 
 async fn handle(
-    mut req: Request<hyper::body::Incoming>,
-) -> Result<hyper::Response<hyper::body::Incoming>, hyper_util::client::legacy::Error> {
-    let host_header = &req
-        .headers()
-        .get("host")
-        .unwrap()
-        .to_str()
-        .unwrap()
-        .to_owned();
+    Host(host): Host,
+    OriginalUri(path): OriginalUri,
+    mut req: Request,
+) -> impl IntoResponse {
+    // tracing::debug!("req -> \n{:?}", req);
+    //tracing::debug!("host -> \n{}", host);
+    //tracing::debug!("path -> \n{}", path.path());
 
-    let host = HOSTS.dest_map.get(host_header).unwrap_or(host_header);
+    let host = HOSTS.dest_map
+        .get(&host).unwrap();
 
-    let uri = format!("{host}{}", req.uri());
+    let uri = format!("{host}{}", path.path());
+    tracing::debug!("uri -> \n{}", uri);
 
-    let mut debug_uri = req.uri().to_string();
-    if debug_uri.len() > 20 {
-        debug_uri = debug_uri[0..20].to_string() + "..."
-    };
-    tracing::info!("\n{host_header} => {} @ {debug_uri} \n{host}", req.method());
+    // let mut debug_uri = req.uri().to_string();
+    // if debug_uri.len() > 20 {
+    //     debug_uri = debug_uri[0..20].to_string() + "..."
+    // };
 
     *req.uri_mut() = uri.parse().unwrap();
     let client = Client::builder(TokioExecutor::new()).build_http();
+    
+    tracing::debug!("req -> \n{:?}", req);
 
-    client.request(req).await
+    client.request(req).await.unwrap()
 }
 
 #[tokio::main]
@@ -73,28 +65,23 @@ async fn main() {
 
     let addr: SocketAddr = "0.0.0.0:443".parse().unwrap();
 
-    tracing::info!("Starting Tls Tcp listener on {addr}");
+    // configure certificate and private key used by https
+    let config = RustlsConfig::from_pem(
+        PUBLIC.to_vec(),
+        PRIVATE.to_vec(),
+    )
+    .await
+    .unwrap();
 
-    // This uses a filter to handle errors with connecting
-    TlsListener::new(tls_acceptor_impl(PKEY,CERT), 
-        TcpListener::bind(addr).await.unwrap())
-        .connections()
-        .filter_map(|conn| {
-            ready(match conn {
-                Err(err) => {
-                    tracing::error!("{err}");
-                    None
-                }
-                Ok(c) => Some(TokioIo::new(c)),
-            })
-        })
-        .for_each_concurrent(None, |conn| async {
-            if let Err(err) = http1::Builder::new()
-                .serve_connection(conn, service_fn(handle))
-                .await
-            {
-                eprintln!("Error serving connection: {:?}", err);
-            }
-        })
-        .await;
+    let app = Router::new()
+        .route("/*0", any(handle))
+        .route("/", any(handle))
+    ;
+
+    // run https server
+    tracing::debug!("listening on {}", addr);
+    axum_server::bind_rustls(addr, config)
+        .serve(app.into_make_service())
+        .await
+        .unwrap();
 }
