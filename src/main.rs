@@ -1,13 +1,18 @@
 mod config_loader;
 mod tls;
 
+use axum::extract::Query;
+use axum::response::{Html, IntoResponse};
+use axum::routing::{any, get};
+use axum::Router;
 use hyper::service::service_fn;
-use hyper::Request;
+use hyper::{Request, StatusCode, Uri};
 
 use futures_util::stream::StreamExt;
-use hyper_util::client::legacy::Client;
+use hyper_util::client::legacy::Client as Client;
+use hyper_util::client::legacy::connect::HttpConnector;
 use hyper_util::rt::TokioExecutor;
-use std::future::ready;
+use std::{future::ready, sync::Mutex};
 use std::net::SocketAddr;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
@@ -30,8 +35,34 @@ Can client just use different certs, and return response? NO
 // Load config from file / create new file
 static HOSTS: Lazy<Config> = Lazy::new(Config::load);
 
+
+static REQS: Lazy<Mutex<RequestsHandled>> = Lazy::new(||{
+    Mutex::new(RequestsHandled::new())
+});
+
+static CLIENT: Lazy<hyper_util::client::legacy::Client<HttpConnector, hyper::body::Incoming>> = Lazy::new(||{
+    Client::builder(TokioExecutor::new()).build_http()
+});
+
+static HOST404: Lazy<String> = Lazy::new(||{
+    "http://127.0.0.1:41050/".to_owned()
+});
+
 const CERT: &[u8] = include_bytes!("../tls/cloudflare-origin/public.der");
 const PKEY: &[u8] = include_bytes!("../tls/cloudflare-origin/private.der");
+
+struct RequestsHandled(u64);
+impl RequestsHandled {
+    fn increment(&mut self) {
+        self.0 += 1;
+    }
+    fn print(&self) {
+        tracing::info!("Requests Handled: {}\n", self.0);
+    }
+    fn new() -> Self {
+        RequestsHandled(0)
+    }
+}
 
 async fn handle(
     mut req: Request<hyper::body::Incoming>,
@@ -44,24 +75,28 @@ async fn handle(
         .unwrap()
         .to_owned();
 
-    let host = HOSTS.dest_map.get(host_header).unwrap_or(host_header);
+    let host = HOSTS.dest_map.get(host_header).unwrap_or(&HOST404);
 
+    tracing::info!("{host_header} => {host}");
+    
     let uri = format!("{host}{}", req.uri());
 
-    let mut debug_uri = req.uri().to_string();
-    if debug_uri.len() > 20 {
-        debug_uri = debug_uri[0..20].to_string() + "..."
-    };
-    tracing::info!("\n{host_header} => {} @ {debug_uri} \n{host}", req.method());
-
     *req.uri_mut() = uri.parse().unwrap();
-    let client = Client::builder(TokioExecutor::new()).build_http();
 
-    client.request(req).await
+    {
+        let mut lock = REQS.lock().unwrap();
+        lock.increment();
+        lock.print();
+        drop(lock)
+    }
+
+    CLIENT.request(req).await
 }
 
 #[tokio::main]
 async fn main() {
+    // TODO: for servedir, tokio spawn an axum server and then the proxy service can route to it?!
+
     // Create and start logger
     tracing_subscriber::registry()
         .with(
@@ -70,6 +105,10 @@ async fn main() {
         )
         .with(tracing_subscriber::fmt::layer())
         .init();
+
+    let service_404_handle = tokio::spawn(async {
+        create_404_service().await
+    });
 
     let addr: SocketAddr = "0.0.0.0:443".parse().unwrap();
 
@@ -97,4 +136,26 @@ async fn main() {
             }
         })
         .await;
+
+    _ = service_404_handle.await;
+}
+
+async fn create_404_service() {
+    // build our application with a route
+    let app = Router::new()
+        .route("/", any(handler))
+        .route("/*0", any(handler));
+
+    // run it
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:41050")
+        .await
+        .unwrap();
+    tracing::info!("Starting 404 service");
+    axum::serve(listener, app).await.unwrap();
+}
+
+async fn handler() -> impl IntoResponse {
+    tracing::info!("404 hit");
+
+    StatusCode::NOT_FOUND
 }
