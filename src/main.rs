@@ -1,19 +1,18 @@
 mod config_loader;
 mod tls;
 
-use axum::extract::Query;
-use axum::response::{Html, IntoResponse};
-use axum::routing::{any, get};
+use axum::response::Html;
+use axum::routing::any;
 use axum::Router;
 use hyper::service::service_fn;
-use hyper::{Request, StatusCode, Uri};
+use hyper::{Request, StatusCode};
 
 use futures_util::stream::StreamExt;
-use hyper_util::client::legacy::Client as Client;
 use hyper_util::client::legacy::connect::HttpConnector;
+use hyper_util::client::legacy::Client;
 use hyper_util::rt::TokioExecutor;
-use std::{future::ready, sync::Mutex};
 use std::net::SocketAddr;
+use std::{future::ready, sync::Mutex};
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
 use hyper::server::conn::http1;
@@ -28,25 +27,29 @@ use tokio::net::TcpListener;
 use config_loader::Config;
 
 /*
-TODO: use different cert key combo per host
-Can client just use different certs, and return response? NO
-*/
+TODO: 
 
+- for servedir, tokio spawn an axum server and then the proxy service can route to it?!
+- Create servedir, 404 from config
+
+try and update to toml with format, these should be Option<T>
+Maybe a seperate tls config file, 
+as it seems we cannot use a different tls setting for the different hosts (yet).
+
+[emby.citrusfire.co.uk]
+destination = "http://192.168.68.100:8096"
+serve_dir = "./www"
+
+*/
 // Load config from file / create new file
 static HOSTS: Lazy<Config> = Lazy::new(Config::load);
 
+static REQS: Lazy<Mutex<RequestsHandled>> = Lazy::new(|| Mutex::new(RequestsHandled::new()));
 
-static REQS: Lazy<Mutex<RequestsHandled>> = Lazy::new(||{
-    Mutex::new(RequestsHandled::new())
-});
+static CLIENT: Lazy<hyper_util::client::legacy::Client<HttpConnector, hyper::body::Incoming>> =
+    Lazy::new(|| Client::builder(TokioExecutor::new()).build_http());
 
-static CLIENT: Lazy<hyper_util::client::legacy::Client<HttpConnector, hyper::body::Incoming>> = Lazy::new(||{
-    Client::builder(TokioExecutor::new()).build_http()
-});
-
-static HOST404: Lazy<String> = Lazy::new(||{
-    "http://127.0.0.1:41050/".to_owned()
-});
+static HOST404: Lazy<String> = Lazy::new(|| "http://127.0.0.1:41050/".to_owned());
 
 const CERT: &[u8] = include_bytes!("../tls/cloudflare-origin/public.der");
 const PKEY: &[u8] = include_bytes!("../tls/cloudflare-origin/private.der");
@@ -78,7 +81,7 @@ async fn handle(
     let host = HOSTS.dest_map.get(host_header).unwrap_or(&HOST404);
 
     tracing::info!("{host_header} => {host}");
-    
+
     let uri = format!("{host}{}", req.uri());
 
     *req.uri_mut() = uri.parse().unwrap();
@@ -95,7 +98,6 @@ async fn handle(
 
 #[tokio::main]
 async fn main() {
-    // TODO: for servedir, tokio spawn an axum server and then the proxy service can route to it?!
 
     // Create and start logger
     tracing_subscriber::registry()
@@ -106,40 +108,43 @@ async fn main() {
         .with(tracing_subscriber::fmt::layer())
         .init();
 
-    let service_404_handle = tokio::spawn(async {
-        create_404_service().await
+    let service_404_handle = tokio::spawn(async { 
+        create_404_service().await 
     });
 
     let addr: SocketAddr = "0.0.0.0:443".parse().unwrap();
 
-    tracing::info!("Starting Tls Tcp listener on {addr}");
+    tracing::info!("Starting tls tcp listener on {addr}");
 
     // This uses a filter to handle errors with connecting
-    TlsListener::new(tls_acceptor_impl(PKEY,CERT), 
-        TcpListener::bind(addr).await.unwrap())
-        .connections()
-        .filter_map(|conn| {
-            ready(match conn {
-                Err(err) => {
-                    tracing::error!("{err}");
-                    None
-                }
-                Ok(c) => Some(TokioIo::new(c)),
-            })
-        })
-        .for_each_concurrent(None, |conn| async {
-            if let Err(err) = http1::Builder::new()
-                .serve_connection(conn, service_fn(handle))
-                .await
-            {
-                eprintln!("Error serving connection: {:?}", err);
+    TlsListener::new(
+        tls_acceptor_impl(PKEY, CERT),
+        TcpListener::bind(addr).await.unwrap(),
+    )
+    .connections()
+    .filter_map(|conn| {
+        ready(match conn {
+            Err(err) => {
+                tracing::error!("{err}");
+                None
             }
+            Ok(c) => Some(TokioIo::new(c)),
         })
-        .await;
+    })
+    .for_each_concurrent(None, |conn| async {
+        if let Err(err) = http1::Builder::new()
+            .serve_connection(conn, service_fn(handle))
+            .await
+        {
+            eprintln!("Error serving connection: {:?}", err);
+        }
+    })
+    .await;
 
     _ = service_404_handle.await;
 }
 
+// TODO: 404 service should take in a port, optionally redirect? etc...
 async fn create_404_service() {
     // build our application with a route
     let app = Router::new()
@@ -157,5 +162,8 @@ async fn create_404_service() {
 async fn handler() -> (StatusCode, Html<&'static str>) {
     tracing::info!("404 hit");
 
-    (StatusCode::NOT_FOUND, Html("<h1>You've hit 404, this host and/or address leads to no where...</h1>"))
+    (
+        StatusCode::NOT_FOUND,
+        Html("<h1>You've hit 404, this host and/or address leads to nowhere...</h1>"),
+    )
 }

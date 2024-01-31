@@ -49,17 +49,17 @@ impl Config {
             public: "./public.pem".into(),
             private: "./private.pem".into(),
         };
-    
+
         let host = Host {
             host: "emby.citrusfire.co.uk".into(),
             destination: "192.168.68.100:8096".into(),
             tls: Some(tls),
         };
-    
+
         let serialized = serde_json::to_string(&host).unwrap();
-    
+
         let write_handle = fs::write(CONFIG, serialized);
-    
+
         match write_handle {
             Ok(_) => {
                 tracing::info!("Created new {CONFIG}, close and then edit your config file.");
@@ -70,7 +70,4 @@ impl Config {
         }
         Self::to_map(vec![host])
     }
-    
 }
-
-
