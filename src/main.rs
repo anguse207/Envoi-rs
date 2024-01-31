@@ -1,17 +1,19 @@
 mod config_loader;
 mod tls;
 
-use axum::{extract::{Host, OriginalUri, Request}, response::IntoResponse, routing::any, Router};
+use axum::{body::Body, extract::{Host, OriginalUri, Request}, response::{Html, IntoResponse, Response}, routing::any, Router};
 use axum_server::tls_rustls::RustlsConfig;
 
-use hyper_util::client::legacy::Client;
-use hyper_util::rt::TokioExecutor;
+use hyper::StatusCode;
+use hyper_util::{client::legacy::connect::HttpConnector, rt::TokioExecutor};
 use std::net::SocketAddr;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
 use once_cell::sync::Lazy;
 
 use config_loader::Config;
+
+type Client = hyper_util::client::legacy::Client<HttpConnector, Body>;
 
 /*
 TODO: use different cert key combo per host
@@ -29,27 +31,23 @@ async fn handle(
     OriginalUri(path): OriginalUri,
     mut req: Request,
 ) -> impl IntoResponse {
-    // tracing::debug!("req -> \n{:?}", req);
-    //tracing::debug!("host -> \n{}", host);
-    //tracing::debug!("path -> \n{}", path.path());
-
     let host = HOSTS.dest_map
         .get(&host).unwrap();
 
     let uri = format!("{host}{}", path.path());
     tracing::debug!("uri -> \n{}", uri);
 
-    // let mut debug_uri = req.uri().to_string();
-    // if debug_uri.len() > 20 {
-    //     debug_uri = debug_uri[0..20].to_string() + "..."
-    // };
-
     *req.uri_mut() = uri.parse().unwrap();
-    let client = Client::builder(TokioExecutor::new()).build_http();
-    
+
+    let client: Client =
+    hyper_util::client::legacy::Client::<(), ()>::builder(TokioExecutor::new())
+        .build(HttpConnector::new());  
+
     tracing::debug!("req -> \n{:?}", req);
 
-    client.request(req).await.unwrap()
+    client
+        .request(req)
+        .await.unwrap()
 }
 
 #[tokio::main]
