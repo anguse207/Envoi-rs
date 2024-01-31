@@ -154,8 +154,8 @@ async fn create_404_service() {
     axum::serve(listener, app).await.unwrap();
 }
 
-async fn handler() -> impl IntoResponse {
+async fn handler() -> (StatusCode, Html<&'static str>) {
     tracing::info!("404 hit");
 
-    StatusCode::NOT_FOUND
+    (StatusCode::NOT_FOUND, Html("<h1>You've hit 404, this host and/or address leads to no where...</h1>"))
 }
