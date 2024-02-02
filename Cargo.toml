@@ -21,3 +21,4 @@ bytes = "1.5.0"
 
 tls_listener = { path = "./local_dependencies/tls_listener", features = ["rustls","rt"] }
 axum = "0.7.4"
+tower-http = { version = "0.5.1", features = ["full"] }

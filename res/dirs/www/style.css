@@ -1,0 +1,53 @@
+html {
+    background-color: #1f1f1f;
+}
+
+#plex {
+    position: fixed;
+    top: 0;
+}
+
+#ombi {
+    position: fixed;
+    bottom: 0;
+}
+
+img {
+    position: absolute;
+    left: 50%;
+    margin-left: -50vh;
+    height: 50vh;
+    transition: 0.4s;
+}
+
+img:hover {
+    height: 65vh;
+    margin-left: -65vh;
+}
+
+@media only screen and (max-width : 768px) {
+    img {
+        position: absolute;
+        left: 50%;
+        margin-left: -230px;
+        height: 260px;
+        transition: 0.4s;
+    }
+    img:hover {
+        height: 300px;
+        margin-left: -260px;
+    }
+}
+
+/* The animation code */
+@keyframes plexhover {
+    from {
+        height: 50vh;
+        margin-left: -50vh;
+    
+    }
+    to {
+        height: 60vh;
+        margin-left: -60vh;
+    }
+  }

@@ -62,5 +62,13 @@
       "public": "./public.pem",
       "private": "./private.pem"
     }
+  },
+  {
+    "host": "citrusfire.co.uk",
+    "destination": "http://127.0.0.1:41051",
+    "tls": {
+      "public": "./public.pem",
+      "private": "./private.pem"
+    }
   }
 ]

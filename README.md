@@ -28,3 +28,11 @@ convert using openssl cli to .der (b64 format).
 ### EC -> DER (-----BEGIN EC PRIVATE KEY-----)
 
 => `openssl ec -in input.key -out output.der -outform DER`
+
+### public key
+
+`$ openssl x509 -outform der -in fullchain.pem -out certificatename.der`
+
+### private key
+
+`$ openssl pkcs8 -inform PEM -outform DER -in privkey.pem -out key.der -nocrypt`

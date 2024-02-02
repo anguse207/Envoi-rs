@@ -11,6 +11,7 @@ use futures_util::stream::StreamExt;
 use hyper_util::client::legacy::connect::HttpConnector;
 use hyper_util::client::legacy::Client;
 use hyper_util::rt::TokioExecutor;
+use tower_http::services::ServeDir;
 use std::net::SocketAddr;
 use std::{future::ready, sync::Mutex};
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
@@ -51,8 +52,8 @@ static CLIENT: Lazy<hyper_util::client::legacy::Client<HttpConnector, hyper::bod
 
 static HOST404: Lazy<String> = Lazy::new(|| "http://127.0.0.1:41050/".to_owned());
 
-const CERT: &[u8] = include_bytes!("../tls/cloudflare-origin/public.der");
-const PKEY: &[u8] = include_bytes!("../tls/cloudflare-origin/private.der");
+const CERT: &[u8] = include_bytes!("../res/tls/cloudflare-origin/public.der");
+const PKEY: &[u8] = include_bytes!("../res/tls/cloudflare-origin/private.der");
 
 struct RequestsHandled(u64);
 impl RequestsHandled {
@@ -111,7 +112,29 @@ async fn main() {
     let service_404_handle = tokio::spawn(async { 
         create_404_service().await 
     });
+    let service_dir_handle = tokio::spawn(async { 
+        create_servedir_service().await 
+    });
+    let service_main_handle = tokio::spawn(async { 
+        create_proxy_server().await 
+    });
+    
+    tokio::select!(
+        _ = service_404_handle
+        => {
+            tracing::error!("404 service failed")
+        }
+        _ = service_dir_handle => {
+            tracing::error!("Serve dir service failed")
+        }
+        _ = service_main_handle => {
+            tracing::error!("Main proxy service failed")
+        }
+    )
+}
 
+
+async fn create_proxy_server() {
     let addr: SocketAddr = "0.0.0.0:443".parse().unwrap();
 
     tracing::info!("Starting tls tcp listener on {addr}");
@@ -138,32 +161,53 @@ async fn main() {
         {
             eprintln!("Error serving connection: {:?}", err);
         }
-    })
-    .await;
-
-    _ = service_404_handle.await;
+    }).await
 }
 
 // TODO: 404 service should take in a port, optionally redirect? etc...
 async fn create_404_service() {
-    // build our application with a route
-    let app = Router::new()
-        .route("/", any(handler))
-        .route("/*0", any(handler));
 
-    // run it
-    let listener = tokio::net::TcpListener::bind("127.0.0.1:41050")
-        .await
-        .unwrap();
-    tracing::info!("Starting 404 service");
-    axum::serve(listener, app).await.unwrap();
+    let service_handle = tokio::spawn(async {
+        // build our application with a route
+        let app = Router::new()
+            .route("/", any(handler_404))
+            .route("/*0", any(handler_404));
+
+        // run it
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:41050")
+            .await
+            .unwrap();
+        tracing::info!("Starting 404 service");
+        axum::serve(listener, app).await.unwrap();
+    });
+
+    _ = service_handle.await;
 }
 
-async fn handler() -> (StatusCode, Html<&'static str>) {
+async fn handler_404() -> (StatusCode, Html<&'static str>) {
     tracing::info!("404 hit");
-
     (
         StatusCode::NOT_FOUND,
         Html("<h1>You've hit 404, this host and/or address leads to nowhere...</h1>"),
     )
+}
+
+// TODO: serve dir route
+async fn create_servedir_service() {
+
+    let service_handle = tokio::spawn(async {
+        // build our application with a route
+        let app = Router::new()
+        .nest_service("", 
+            ServeDir::new("../res/dirs/www"));
+
+        // run it
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:41051")
+            .await
+            .unwrap();
+        tracing::info!("Starting serve dir service");
+        axum::serve(listener, app).await.unwrap();
+    });
+
+    _ = service_handle.await;
 }
