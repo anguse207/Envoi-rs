@@ -29,9 +29,16 @@ use config_loader::Config;
 
 /*
 TODO: 
-
+Short Term
 - for servedir, tokio spawn an axum server and then the proxy service can route to it?!
 - Create servedir, 404 from config
+- dockerize
+
+Long Term
+- Configurable rate limiting, geo blocking, ip blocking etc...
+- tls per host
+- web portal config tool
+
 
 try and update to toml with format, these should be Option<T>
 Maybe a seperate tls config file, 
